@@ -1,27 +1,15 @@
-# SpectralMachine
-Machine learning software for rapid spectral analysis. While Raman spectra were the initilal focus, SpectralMachine is flexible to be applied for classification using any spectra (from XRD, FTIR and beyond). The latest and supporrted software within SpectralMachine is SpectraKeras. The previous generation (SpectraLearnPredict) is no longer developed. 
+# SpectralMachine: SpectraKeras
+Machine learning software for rapid spectral analysis. While Raman spectra were the initilal focus, `SpectraKeras` is flexible to be applied for classification using any spectra (from XRD, FTIR and beyond). The previous generation software (`SpectraLearnPredict`) is no longer developed. 
 
 **SpectraKeras**
 - Currently supported ML architectures:
    - DNNClassifier (TensorFlow, TensorFlow-Lite)
-   - Convolutional Neural Networks (TensorFlow-Lite)
+   - Convolutional Neural Networks (TensorFlow, TensorFlow-Lite)
 - Required libraries for prediction:
-   - tensorflow (v.2.3 and higher)
-   - Optional: tensorflow-lite (v.2.3 and higher)
+   - tensorflow (v2.16.2 recommended)
+   - Optional: tensorflow-lite (v2.16.2 recommended)
    - Optional: [tensorflow-lite runtime](https://www.tensorflow.org/lite/guide/python) 
    - Optional: tensorflow-lite runtime with [Coral EdgeTPU](https://coral.ai/docs/accelerator/get-started/)
-
-**Previous version: SpectralLearnPredict**
-- This is deprecated and no longer developed.
- - Deep Neural Networks:
-   - multi-layer perceptron (MLP) (L-BFGS Optimizer strongly recommended)
-   - DNNClassifier (TensorFlow and keras)
-   - Convolutional Neural Networks (Under development - via keras)
- - Support Vector Machine - SVM
- - TensorFlow (basic implementation)
- - Additional multivariate analysis
-   - K-Means
-   - Principal component analysis
 
 Credits and References
 ==================
@@ -32,17 +20,37 @@ If you use SpectralMachine or SpectraKeras, we request that you reference the pa
 
 Installation
 =============
+## Installation from available wheel package
+If available from the main site, you can install SpectraKeras by running:
 
-This software requires Python (3.6 or higher). It has been tested with Python 3.6 or higher which is the recommended platform. It is not compatible with python 2.x. Additional required packages:
+    python3 -m pip install --upgrade spectrakeras-2024.10.08.1-py3-none-any.whl
+    
+SpectraKeras_CNN and Spectrakeras_MLP are available directly from the command line.
+NOTE: The Utilities in the `Utilities` folder are not included in the package, and can be run locally as needed.
+
+## Make your own wheel package
+Make sure you have the PyPA build package installed:
+
+    python3 -m pip install --upgrade build
+    
+To build the wheel package rom the `SpectraKeras` folder run:
+
+    python3 -m build
+    
+A wheel package is available in the subfolder `dir`. You can install it following the instructions shown above.
+
+## Compatibility and dependences
+This software requires Python (3.9 or higher). It has been tested with Python 3.9 or higher which is the recommended platform. It is not compatible with python 2.x. Additional required packages:
 
     numpy
     scikit-learn (>=0.18)
+    scipy
     matplotlib
     pandas
     pydot
     graphviz
     h5py
-    tensorflow (>=2.3, not compatible with TF 1.x)
+    tensorflow (>=2.16.2)
     
 In addition, these packages may be needed depending on your platform (via ```apt-get``` in debian/ubuntu or ```port``` in OSX):
     
@@ -51,9 +59,12 @@ In addition, these packages may be needed depending on your platform (via ```apt
 
 These are found in Unix based systems using common repositories (apt-get for Debian/Ubuntu Linux, or MacPorts for MacOS). More details in the [scikit-learn installation page](http://scikit-learn.org/stable/install.html).
 
-[TensorFlow](https://www.tensorflow.org) is needed only if flag is activated. Instructions for Linux and MacOS can be found in [TensorFlow installation page](https://www.tensorflow.org/install/). Pip installation is the easiest way to get going. Tested with TensorFlow v.1.15+. TensorFlow 2.x (2.3 or higher preferred) is the currently sipported release. 
+[TensorFlow](https://www.tensorflow.org) is needed only if flag is activated. Instructions for Linux and MacOS can be found in [TensorFlow installation page](https://www.tensorflow.org/install/). Pip installation is the easiest way to get going. Tested with TensorFlow 2.x (2.15 or higher preferred). TF 2.15 is the currently supported release. 
 
-Prediction can be carried out using the regular tensorflow, or using [tensorflow-lite](https://www.tensorflow.org/lite/) for [quantized models](https://www.tensorflow.org/lite/performance/post_training_quantization). Loading times of tflite (direct or via [tflite-runtime](https://www.tensorflow.org/lite/guide/python)) are significantly faster than tensorflow with minimal loss in accuracy. SpectraKeras provides an option to convert tensorflow models to quantized tflite models. TFlite models have been tested in Linux x86-64, arm7 (including Raspberry Pi3) and aarm64, MacOS, Windows. For using quantized model (specifically when deployed on Coral EdgeTPU), TF 2.3 or higher is recommended. 
+Inference can be carried out using the regular tensorflow, or using [tensorflow-lite](https://www.tensorflow.org/lite/) for [quantized models](https://www.tensorflow.org/lite/performance/post_training_quantization). Loading times of tflite (direct or via [tflite-runtime](https://www.tensorflow.org/lite/guide/python)) are significantly faster than tensorflow with minimal loss in accuracy. SpectraKeras provides an option to convert tensorflow models to quantized tflite models. TFlite models have been tested in Linux x86-64, arm7 (including Raspberry Pi3) and aarm64, MacOS, Windows. 
+    To use quantized models, TF 2.13 or higher is recommended. 
+
+Inference using the [Coral EdgeTPU](https://coral.ai/) [tensorflow-lite](https://www.tensorflow.org/lite/) requires the [libedgetpu](https://github.com/google-coral/libedgetpu) libraries compatible with the supported and current version of `tflite-runtime` (version v2.13.0 or hiigher, v2.16.1 recommended), which is also required (Instructions and binaries can be found [here](https://github.com/feranick/TFlite-builds). More information on installation of such libraries at [Coral EdgeTPU](https://coral.ai/). 
 
 Usage (SpectraKeras)
 ===================
@@ -137,7 +148,7 @@ Essentially each line in the input file corresponds to a training file with its 
 
 Of course it is not expected that the user manually compiles the training file from a possibly large collection of spectra. For that, [`GenericDataMaker.py`](https://github.com/feranick/SpectralMachine/blob/master/Utilities/GenericDataMaker.py) is available in the [`Utilities`](https://github.com/feranick/SpectralMachine/tree/master/Utilities) folder, that can be used to automatically create such files. Basically you can run from the folder where you have your spectra:
 
-`python3 GenericDataMaker.py <learnfile> <enInitial> <enFinal> <enStep>`
+    python3 GenericDataMaker.py <learnfile> <enInitial> <enFinal> <enStep>
 
 The script will interpolate each spectra within the Raman shifts parameters you set above. Note that there are some basic configuration that you may need to change in the `GenericDataMakerp.py` for your case (such as delimiter between data, extension of the files, etc).
 
@@ -148,27 +159,6 @@ Once models are trained trained, prediction on individual files can be made usin
 Training data
 =============
 We do not provide advanced training sets, some of which can be found online. We only provide a simple Raman dataset mainly for testing purposes: it is loosely based on 633nm data from Ferralis et al. [Carbon 108 (2016) 440](http://dx.doi.org/10.1016/j.carbon.2016.07.039).
-
-
-Data augmentation
-==================
-Using the provided training data set as is, accuracy is low. For a single training run using a random 30% of the training set for 100 times, the accuracy is about 32%:
-
-`./SpectraLearnPredict.py -t Training/20170227a/Training_kerogen_633nm_HC_20170227a.txt 1`
-
-Repeating the training few more times (5, for example) marginally increases the accuracy to 35.7% and it is fully converged. This is expected given the small dataset.
-
-Increasing the number of spectra in the actual dataset can be done by accounting for noise. Using the `AddNoisyData.py` utility, the esisting training set is taken, and random variations in intensity at each energy point are added within a given offset. This virtually changes the overall spectra, without changing its overall trend in relation to the classifier. This allows for the preservation of the classifier for a given spectra, but it also increases the number of available spectra. This method is obviously a workaround, but it allows accuracy to be substantially increased. Furthermore, it lends a model better suited at dealing with noisy data. 
-
-To recreate, let's start with adding noisy spectra to the training set. For example, let's add 5 replicated spectra with random noise added with an offset of 0.02 (intensity is normalized to the `range [0,1]`)
-
-`AddNoisyData.py Training/20170227a/Training_kerogen_633nm_HC_20170227a.txt 5 0.02`
-
-Accuracy is increased to 80.4% with a single training run (100 times 30% of the dataset). 2 iterations increase accuracy to 95.8% and a third increased to 100%. (The same can be achieved by running 30% of the dataset 300 times).
-
-One can optimize/minimize the number of spectra with added noise. Adding only 2 data-sets with noise offset at 0.02 converges the accuracy to about 94.6%. 
-
-**One final word of caution**: Increasing the number of statistically independent available spectra for training is recommended over adding noisy data. 
 
 More on Machine Learning tools used
 ====================================
@@ -183,4 +173,4 @@ More on Machine Learning tools used
 
 Known Issues
 ==================
-Starting from version `20210513a`, models are saved with the `.h5` extension, and are expected to have that extension. Previously, models were saved with the non-standard `.hd5` extension. If you have previously trained models saved in `.hd5`, just rename the extension as `.h5`. No change in functionality besides the change in extension.
+None

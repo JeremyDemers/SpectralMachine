@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-*********************************************
-*
+*************************************************
 * XmuDataMaker
 * Adds spectra to single file for classification
 * File must be in Xmu
-* version: 20180619a
-*
+* version: v2024.10.07.1
 * By: Nicola Ferralis <feranick@hotmail.com>
-*
-***********************************************
+*************************************************
 '''
 print(__doc__)
 
@@ -34,7 +31,7 @@ class defParam:
     # set to True to set boundaries as the min
     # values for intensities when to
     # fill in in absence of data
-    useMinForBoundary = False
+    useMinForBoundary = True
 
 def main():
     if len(sys.argv) < 5:
@@ -86,7 +83,7 @@ def processMultiFile(learnFile, enInit, enFin, enStep, threshold):
         EnT, M = readLearnFile(learnFile)
     else:
         print('\n\033[1m' + ' Train data file not found. Creating...' + '\033[0m')
-        EnT = np.arange(float(enInit), float(enFin), float(enStep), dtype=np.float)
+        EnT = np.arange(float(enInit), float(enFin), float(enStep), dtype=float)
         M = np.append([0], EnT)
 
     for ind, f in enumerate(sorted(os.listdir("."))):
@@ -148,8 +145,10 @@ def makeFile(sampleFile, EnT, M, param, threshold):
         print('\033[1m' + ' Mismatch in datapoints: ' + str(EnT.shape[0]) + '; sample = ' +  str(En.shape[0]) + '\033[0m')
         if defParam.useMinForBoundary == True:
             print(" Boundaries: Filling in with min values")
-            defParam.leftBoundary = R[0]
-            defParam.rightBoundary = R[R.shape[0]-1]
+            #defParam.leftBoundary = R[0]
+            #defParam.rightBoundary = R[R.shape[0]-1]
+            defParam.leftBoundary = np.amin(R)
+            defParam.rightBoundary = np.amin(R)
         else:
             print(" Boundaries: Filling in preset values")
         print("  Left:",defParam.leftBoundary,"; Right:",defParam.leftBoundary)
@@ -172,7 +171,7 @@ def saveLearningFile(M, learnFileRoot):
     else:
         learnFile = learnFileRoot+'.h5'
         with h5py.File(learnFile, 'w') as hf:
-            hf.create_dataset("M",  data=M)
+            hf.create_dataset("M",  data=M.astype(np.float64))
         print(" Saving new training file (hdf5) in: "+learnFile+"\n")
 
 #************************************

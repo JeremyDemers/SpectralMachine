@@ -49,7 +49,7 @@ def readLearnFile(learnFile, dP):
 def readTestFile(testFile, En, dP):
     try:
         with open(testFile, 'r') as f:
-            print('\n  Opening sample data for prediction:\n  ',testFile)
+            #print('\n  Opening sample data for prediction:\n  ',testFile)
             Rtot = np.loadtxt(f, unpack =True)
         R = preProcess(Rtot, En, dP)
     except:
@@ -68,7 +68,7 @@ def preProcess(Rtot, En, dP):
         norm = Normalizer()
         R = norm.transform_single(R)
 
-    if(R.shape[1] != len(En)):
+    if(R.shape[1] is not len(En)):
         print('  Rescaling x-axis from',str(R.shape[1]),'to',str(len(En)))
         R = np.interp(En, Rx[0], R[0])
         R = R.reshape(1,-1)
@@ -82,12 +82,12 @@ def loadModel(dP):
         import tflite_runtime.interpreter as tflite
         # model here is intended as interpreter
         if dP.runCoralEdge:
-            print(" Running on Coral Edge TPU")
+            #print(" Running on Coral Edge TPU")
             try:
                 model = tflite.Interpreter(model_path=os.path.splitext(dP.model_name)[0]+'_edgetpu.tflite',
                     experimental_delegates=[tflite.load_delegate(dP.edgeTPUSharedLib,{})])
             except:
-                print(" Coral Edge TPU not found. \n Please make sure it's connected and Tflite-runtime matches the TF version that is installled.")
+                print(" Coral Edge TPU not found. Please make sure it's connected and Tflite-runtime matches the TF version that is installled.")
         else:
             model = tflite.Interpreter(model_path=os.path.splitext(dP.model_name)[0]+'.tflite')
         model.allocate_tensors()
@@ -174,7 +174,7 @@ def makeQuantizedTFmodel(A, dP):
         # New method 2:
         import keras
         model = keras.saving.load_model(dP.model_name)
-
+        
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = representative_dataset_gen

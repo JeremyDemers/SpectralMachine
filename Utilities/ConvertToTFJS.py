@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-**********************************************************
+**********************************************
 * Convert TF models (TF, Keras) into TF.js
-* 20181231a
+* v2024.02.16.1
 * Uses: TensorFlow, Keras
 * By: Nicola Ferralis <feranick@hotmail.com>
-***********************************************************
+**********************************************
 '''
 print(__doc__)
-import tensorflow as tf
-import tensorflowjs as tfjs
 import sys, os.path, h5py
-import keras
-#import tensorflow.keras as keras
 
 #************************************
 # Main
@@ -25,16 +21,19 @@ def main():
         return
     else:
         print('\n Converting',sys.argv[1],'to TF.js...\n')
-        convertModelToTFLite(sys.argv[1])
+        convertModelToTFJS(sys.argv[1])
 
 #************************************
 # Convert TF Model to TF.Lite
 #************************************
-def convertModelToTFLite(savedModel):
+def convertModelToTFJS(savedModel):
+    import tensorflow as tf
+    import tensorflowjs as tfjs
+    import keras
     model = keras.models.load_model(savedModel)
     convFile = os.path.splitext(savedModel)[0]+'_js'
     tfjs.converters.save_keras_model(model, convFile)
-    print(' Converted model saved inside:',convFile,'\n')
+    print('\n Converted model saved inside:',convFile,'\n')
 
 #************************************
 # Main initialization routine

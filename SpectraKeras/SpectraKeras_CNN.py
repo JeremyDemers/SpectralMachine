@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 '''
-**********************************************************
+**********************************************
 * SpectraKeras_CNN Classifier and Regressor
-* 20210713a
+* v2024.10.10.1
 * Uses: TensorFlow
 * By: Nicola Ferralis <feranick@hotmail.com>
-***********************************************************
+**********************************************
 '''
 print(__doc__)
 
@@ -48,6 +48,10 @@ class Conf():
 
         self.tb_directory = "model_CNN"
         self.model_name = self.model_directory+self.modelName
+        
+        if self.kerasVersion == 3:
+            self.model_name = os.path.splitext(self.model_name)[0]+".keras"
+        
         self.model_le = self.model_directory+"model_le.pkl"
         self.spectral_range = "model_spectral_range.pkl"
 
@@ -61,13 +65,13 @@ class Conf():
             self.edgeTPUSharedLib = "libedgetpu.1.dylib"
         if platform.system() == 'Windows':
             self.edgeTPUSharedLib = "edgetpu.dll"
-
+        
     def SKDef(self):
         self.conf['Parameters'] = {
             'regressor' : False,
             'normalize' : True,
             'l_rate' : 0.001,
-            'l_rdecay' : 1e-4,
+            'l_rdecay' : 0.96,
             'CL_filter' : [1],
             'CL_size' : [10],
             'max_pooling' : [20],
@@ -91,6 +95,7 @@ class Conf():
 
     def sysDef(self):
         self.conf['System'] = {
+            'kerasVersion' : 2,
             'makeQuantizedTFlite' : True,
             'useTFlitePred' : False,
             'TFliteRuntime' : False,
@@ -127,6 +132,7 @@ class Conf():
             self.metricBestModelR = self.conf.get('Parameters','metricBestModelR')
             self.metricBestModelC = self.conf.get('Parameters','metricBestModelC')
             
+            self.kerasVersion = self.conf.getint('System','kerasVersion')
             self.makeQuantizedTFlite = self.conf.getboolean('System','makeQuantizedTFlite')
             self.useTFlitePred = self.conf.getboolean('System','useTFlitePred')
             self.TFliteRuntime = self.conf.getboolean('System','TFliteRuntime')
@@ -220,10 +226,14 @@ def main():
 #************************************
 def train(learnFile, testFile, flag):
     dP = Conf()
-
-    from pkg_resources import parse_version
     import tensorflow as tf
-    import tensorflow.keras as keras
+    if checkTFVersion("2.16.0"):
+        import tensorflow.keras as keras
+    else:
+        if dP.kerasVersion == 2:
+            import tf_keras as keras
+        else:
+            import keras
         
     opts = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=1)     # Tensorflow 2.0
     conf = tf.compat.v1.ConfigProto(gpu_options=opts)  # Tensorflow 2.0
@@ -249,7 +259,7 @@ def train(learnFile, testFile, flag):
 
     if flag == False:
         with open(dP.spectral_range, 'ab') as f:
-            f.write(pickle.dumps(En))
+            pickle.dump(En, f)
 
     print("  Total number of points per data:",En.size)
     print("  Number of learning labels: {0:d}\n".format(int(dP.numLabels)))
@@ -286,7 +296,7 @@ def train(learnFile, testFile, flag):
         if flag == False:
             print("\n  Label Encoder saved in:", dP.model_le,"\n")
             with open(dP.model_le, 'ab') as f:
-                f.write(pickle.dumps(le))
+                pickle.dump(le, f)
 
         #totCl2 = keras.utils.to_categorical(totCl2, num_classes=np.unique(totCl).size)
         Cl2 = keras.utils.to_categorical(Cl2, num_classes=np.unique(totCl).size+1)
@@ -317,17 +327,24 @@ def train(learnFile, testFile, flag):
         ### Define optimizer
         #************************************
         #optim = opt.SGD(lr=0.0001, decay=1e-6, momentum=0.9, nesterov=True)
-        optim = keras.optimizers.Adam(learning_rate=dP.l_rate, beta_1=0.9,
-                    beta_2=0.999, epsilon=1e-08,
-                    decay=dP.l_rdecay,
-                    amsgrad=False)
+        
+        # New version
+        lr_schedule = keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=dP.l_rate,
+            decay_steps=dP.epochs,
+            decay_rate=dP.l_rdecay)
+        optim = keras.optimizers.Adam(learning_rate=lr_schedule, beta_1=0.9,
+                beta_2=0.999, epsilon=1e-08,
+                amsgrad=False)
         
         model = keras.models.Sequential()
+        model.add(keras.Input(shape=x_train[0].shape))
 
         for i in range(len(dP.CL_filter)):
             model.add(keras.layers.Conv2D(dP.CL_filter[i], (1, dP.CL_size[i]),
                 activation='relu',
-                input_shape=x_train[0].shape))
+                #input_shape=x_train[0].shape
+                ))
             try:
                 model.add(keras.layers.MaxPooling2D(pool_size=(1, dP.max_pooling[i])))
             except:
@@ -351,7 +368,7 @@ def train(learnFile, testFile, flag):
         for i in range(len(dP.HL)):
             model.add(keras.layers.Dense(dP.HL[i],
                 activation = 'relu',
-                input_dim=A.shape[1],
+                #input_dim=A.shape[1],
                 kernel_regularizer=keras.regularizers.l2(dP.l2)))
             model.add(keras.layers.Dropout(dP.dropFCL))
 
@@ -371,7 +388,7 @@ def train(learnFile, testFile, flag):
     model = get_model()
 
     tbLog = keras.callbacks.TensorBoard(log_dir=dP.tb_directory, histogram_freq=120,
-            write_graph=True, write_images=True)
+            write_graph=True, write_images=False)
             
     tbLogs = [tbLog]
     if dP.stopAtBest == True:
@@ -386,7 +403,9 @@ def train(learnFile, testFile, flag):
         
     #tbLogs = [tbLog, es, mc]
 
-    print("\n")
+    print('  =============================================')
+    print('  \033[1m CNN\033[0m - Model Architecture')
+    print('  =============================================\n')
     model.summary()
 
     if flag:
@@ -407,16 +426,24 @@ def train(learnFile, testFile, flag):
             verbose=2,
 	        validation_split=dP.cv_split)
     
-    model.save(dP.model_name, save_format='h5')
+    if dP.saveBestModel == False:
+        model.save(dP.model_name)
+    else:
+        model = loadModel(dP)
+        
     keras.utils.plot_model(model, to_file=dP.model_png, show_shapes=True)
+    
+    if dP.makeQuantizedTFlite:
+        makeQuantizedTFmodel(x_train, dP)
+    
+    print('\n  =============================================')
+    print('  \033[1m CNN\033[0m - Model Architecture')
+    print('  =============================================\n')
     model.summary()
 
-    if dP.makeQuantizedTFlite:
-        makeQuantizedTFmodel(x_train, model, dP)
-
-    print('\n  =============================================')
-    print('  \033[1m CNN\033[0m - Model Configuration')
-    print('  =============================================')
+    print('\n  ========================================================')
+    print('  \033[1m CNN\033[0m - Training/Validation set Configuration')
+    print('  ========================================================')
 
     print("  Training set file:",learnFile)
     if testFile is not None:
@@ -429,13 +456,14 @@ def train(learnFile, testFile, flag):
     val_loss = np.asarray(log.history['val_loss'])
 
     if dP.regressor:
-        def_mae, def_val_mae = [list(log.history)[i] for i in (1,3)]
-        val_mae = np.asarray(log.history[def_val_mae])
+        mae = np.asarray(log.history['mae'])
+        val_mae = np.asarray(log.history['val_mae'])
         printParam()
         print('\n  ==========================================================')
         print('  \033[1m CNN - Regressor\033[0m - Training Summary')
         print('  ==========================================================')
         print("  \033[1mLoss\033[0m - Average: {0:.4f}; Min: {1:.4f}; Last: {2:.4f}".format(np.average(loss), np.amin(loss), loss[-1]))
+        print("  \033[1mMean Abs Err\033[0m - Average: {0:.4f}; Min: {1:.4f}; Last: {2:.4f}".format(np.average(mae), np.amin(mae), mae[-1]))
         print('\n\n  ==========================================================')
         print('  \033[1m CNN - Regressor \033[0m - Validation Summary')
         print('  ========================================================')
@@ -463,9 +491,8 @@ def train(learnFile, testFile, flag):
                     predictions[i][0], score[0], score[1]))
             print('\n  ==========================================================\n')
     else:
-        def_acc, def_val_acc = [list(log.history)[i] for i in (1,3)]
-        accuracy = np.asarray(log.history[def_acc])
-        val_acc = np.asarray(log.history[def_val_acc])
+        accuracy = np.asarray(log.history['accuracy'])
+        val_acc = np.asarray(log.history['val_accuracy'])
         print("  Number unique classes (training): ", np.unique(Cl).size)
         if testFile is not None:
             Cl2_test = le.transform(Cl_test)
@@ -521,28 +548,30 @@ def train(learnFile, testFile, flag):
 def predict(testFile):
     dP = Conf()
     model = loadModel(dP)
+    with open(dP.spectral_range, "rb") as f:
+        EnN = pickle.load(f)
 
-    R, good = readTestFile(testFile, dP)
+    R, good = readTestFile(testFile, EnN, dP)
     if not good:
         return
     R = formatForCNN(R)
 
     if dP.regressor:
         #predictions = model.predict(R).flatten()[0]
-        predictions = getPredictions(R, model, dP).flatten()[0]
+        predictions, _ = getPredictions(R, model, dP)
         print('\n  ========================================================')
         print('  \033[1m CNN - Regressor\033[0m - Prediction')
         print('  ========================================================')
-        predValue = predictions
+        predValue = predictions.flatten()[0]
         print('\033[1m\n  Predicted value (normalized) = {0:.2f}\033[0m\n'.format(predValue))
         print('  ========================================================\n')
 
     else:
-        le_file = open(dP.model_le, "rb")
-        le = pickle.loads(le_file.read())
-        le_file.close()
+        with open(dP.model_le, "rb") as f:
+            le = pickle.load(f)
+    
         #predictions = model.predict(R, verbose=0)
-        predictions = getPredictions(R, model,dP)
+        predictions, _ = getPredictions(R, model,dP)
         pred_class = np.argmax(predictions)
         if dP.useTFlitePred:
             predProb = round(100*predictions[0][pred_class]/255,2)
@@ -563,10 +592,10 @@ def predict(testFile):
             for i in range(len(predictions[0])-1):
                 if predictions[0][i]>0.01:
                     if dP.useTFlitePred:
-                        print("  {0:.2f}\t\t| {1:.2f}".format(le.inverse_transform(i)[0],100*predictions[0][i]/255))
+                        print("  {0:d}\t\t| {1:.2f}".format(int(le.inverse_transform(i)[0]),100*predictions[0][i]/255))
                     else:
-                        print("  {0:.2f}\t\t| {1:.2f}".format(le.inverse_transform(i)[0],100*predictions[0][i]))
-            print('\033[1m\n  Predicted value = {0:.2f} (probability = {1:.2f}%)\033[0m\n'.format(predValue, predProb))
+                        print("  {0:d}\t\t| {1:.2f}".format(int(le.inverse_transform(i)[0]),100*predictions[0][i]))
+            print('\033[1m\n  Predicted value = {0:d} (probability = {1:.2f}%)\033[0m\n'.format(int(predValue), predProb))
             print('  ========================================================\n')
 
         else:
@@ -587,17 +616,19 @@ def predict(testFile):
 def batchPredict(folder):
     dP = Conf()
     model = loadModel(dP)
+    with open(dP.spectral_range, "rb") as f:
+        EnN = pickle.load(f)
 
     predictions = np.zeros((0,0))
     fileName = []
     for file in glob.glob(folder+'/*.txt'):
-        R, good = readTestFile(file, dP)
+        R, good = readTestFile(file, EnN, dP)
         if good:
             R = formatForCNN(R)
             try:
-                predictions = np.vstack((predictions,getPredictions(R, model, dP).flatten()))
+                predictions = np.vstack((predictions,getPredictions(R, model, dP)[0].flatten()))
             except:
-                predictions = np.array([getPredictions(R, model,dP).flatten()])
+                predictions = np.array([getPredictions(R, model,dP)[0].flatten()])
             fileName.append(file)
 
     if dP.regressor:
@@ -612,9 +643,9 @@ def batchPredict(folder):
         print('  ========================================================\n')
 
     else:
-        le_file = open(dP.model_le, "rb")
-        le = pickle.loads(le_file.read())
-        le_file.close()
+        with open(dP.model_le, "rb") as f:
+            le = pickle.load(f)
+        
         summaryFile = np.array([['SpectraKeras_CNN','Classifier',''],['File name','Predicted Class', 'Probability']])
         print('\n  ========================================================')
         print('  \033[1m CNN - Classifier\033[0m - Prediction')
@@ -630,7 +661,7 @@ def batchPredict(folder):
 
             if pred_class.size >0:
                 predValue = le.inverse_transform(pred_class)[0]
-                print('  {0:s}:\033[1m\n   Predicted value = {1:.2f} (probability = {2:.2f}%)\033[0m\n'.format(fileName[i],predValue, predProb))
+                print('  {0:s}:\033[1m\n   Predicted value = {1:d} (probability = {2:.2f}%)\033[0m\n'.format(fileName[i],int(predValue), predProb))
             else:
                 predValue = 0
                 print('  {0:s}:\033[1m\n   No predicted value (probability = {1:.2f}%)\033[0m\n'.format(fileName[i],predProb))
@@ -660,17 +691,16 @@ def accDeterm(testFile):
     for row in A:
         R = formatForCNN(np.array([row]))
         try:
-            predictions = np.vstack((predictions,getPredictions(R, model, dP).flatten()))
+            predictions, _ = np.vstack((predictions,getPredictions(R, model, dP).flatten()))
         except:
-            predictions = np.array([getPredictions(R, model,dP).flatten()])
+            predictions, _ = np.array([getPredictions(R, model,dP).flatten()])
 
     if dP.regressor:
         print("\n  Accuracy determination is not defined in regression. Exiting.\n")
         return
     else:
-        le_file = open(dP.model_le, "rb")
-        le = pickle.loads(le_file.read())
-        le_file.close()
+        with open(dP.model_le, "rb") as f
+            le = pickle.load(f)
         summaryFile = np.array([['SpectraKeras_CNN','Classifier',''],['Real Class','Predicted Class', 'Probability']])
 
         successPred = 0
@@ -708,15 +738,13 @@ def convertTflite(learnFile):
     dP.useTFlitePred = False
     dP.TFliteRuntime = False
     dP.runCoralEdge = False
-    from pkg_resources import parse_version
-    import tensorflow as tf
-    if parse_version(tf.version.VERSION) < parse_version('2.0.0'):
+    if checkTFVersion('2.0.0'):
         tf.compat.v1.enable_eager_execution()
     learnFileRoot = os.path.splitext(learnFile)[0]
     En, A, Cl = readLearnFile(learnFile, dP)
     model = loadModel(dP)
     x_train = formatForCNN(A)
-    makeQuantizedTFmodel(x_train, model, dP)
+    makeQuantizedTFmodel(x_train, dP)
     
 #****************************************************
 # Format data for CNN
@@ -768,10 +796,17 @@ def printParam():
 def plotActivationsTrain(model):
     import matplotlib.pyplot as plt
     import tensorflow as tf
+    if checkTFVersion("2.16.0"):
+        import tensorflow.keras as keras
+    else:
+        if dP.kerasVersion == 2:
+            import tf_keras as keras
+        else:
+            import keras
     dP = Conf()
     i = 0
     for layer in model.layers:
-        if isinstance(layer, tf.keras.layers.Conv2D):
+        if isinstance(layer, keras.layers.Conv2D):
             weight_conv2d = layer.get_weights()[0][:,:,0,:]
             filter_index = 0
             col_size = dP.sizeColPlot
@@ -794,7 +829,16 @@ def plotActivationsTrain(model):
 def plotActivationsPredictions(R, model):
     print(" Saving activation plots...\n")
     import matplotlib.pyplot as plt
-    from tensorflow.keras.models import Model
+    if checkTFVersion("2.16.0"):
+        import tensorflow as tf
+        import tensorflow.keras as keras
+    else:
+        if dP.kerasVersion == 2:
+            import tf_keras as keras
+        else:
+            import keras
+    from keras.models import Model
+    
     dP = Conf()
     layer_outputs = [layer.output for layer in model.layers]
     activation_model = Model(inputs=model.input, outputs=layer_outputs)
